@@ -1,26 +1,36 @@
 #!/usr/bin/env python3
 """
-A cache task file
+the web cache and tracker
 """
 import requests
 import redis
-
+from functools import wraps
 
 store = redis.Redis()
 
 
+def count_url_access(method):
+    """ Decorator counting how many times
+    a URL is accessed """
+    @wraps(method)
+    def wrapper(url):
+        cached_key = "cached:" + url
+        cached_data = store.get(cached_key)
+        if cached_data:
+            return cached_data.decode("utf-8")
+
+        count_key = "count:" + url
+        html = method(url)
+
+        store.incr(count_key)
+        store.set(cached_key, html)
+        store.expire(cached_key, 10)
+        return html
+    return wrapper
+
+
+@count_url_access
 def get_page(url: str) -> str:
-    """get html elements of a url"""
-    key_for_cache = "cached:" + url
-    data_from_cache = store.get(key_for_cache)
-    if data_from_cache:
-        return data_from_cache.decode("utf-8")
-
-    result = requests.get(url)
-    html = result.text
-
-    ke_counter = "count:" + url
-    store.incr(ke_counter)
-    store.set(key_for_cache, html)
-    store.expire(key_for_cache, 10)
-    return html
+    """ Returns HTML content of a url """
+    res = requests.get(url)
+    return res.text
